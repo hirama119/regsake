@@ -16,14 +16,14 @@ import scipy.stats
 import cPickle
 import csv
 
-gpu_flag = -1
+gpu_flag = 1
 
 if gpu_flag >= 0:
     cuda.check_cuda_available()
 xp = cuda.cupy if gpu_flag >= 0 else np
 
-batchsize = 5
-val_batchsize=17
+batchsize = 3
+val_batchsize=6
 n_epoch = 100
 tate=165
 yoko=25
@@ -53,7 +53,7 @@ def forward(x_data, y_data, train=True):
         F.local_response_normalization(model.conv2(h))), 3,stride=2)
     h = F.dropout(F.relu(model.fc6(h)))
     h = F.dropout(F.relu(model.fc7(h)))
-    h = F.relu(model.fc8(h))
+    h = model.fc8(h)
     #import pdb; pdb.set_trace()
     if train:
         return F.mean_squared_error(h, t)
@@ -91,13 +91,13 @@ gyokaku = np.genfromtxt("gyokaku.csv", delimiter=",", dtype=np.string_)
 
 
 for al1,al in enumerate(gyokaku):
-    #print str(al[1])+".pkl open"
+    print al1
     with open(str(al[1]) + '.pkl', 'rb') as i:
         data = cPickle.load(i)
 
     for i in range(2,50):
         if int(data[len(data)-25*i][0])!=0:
-            all_data.append((data[len(data)-25*(i+1):len(data)-25*i,0:],float(al[2])))
+            all_data.append((data[len(data)-25*(i+1):len(data)-25*i,0:165],float(al[2])))
 
 
 
@@ -106,8 +106,11 @@ for al1,al in enumerate(gyokaku):
 start_time = time.clock()
 
 a=len(all_data)
-N=int(a*0.8)
-N_test=int(a-N)
+ds = np.arange(a)
+
+N, N_test = np.split(ds, [int(ds.size * 0.8)])
+N=len(N)
+N_test=len(N_test)
 print a,N,N_test
 
 for epoch in range(1, n_epoch + 1):
@@ -118,8 +121,6 @@ for epoch in range(1, n_epoch + 1):
     sum_loss = 0
     count=0
     for i in range(0, N, batchsize):
-        if i%100==0:
-            print i
         x_batch1 = np.ndarray(
             (batchsize, 1, yoko, tate), dtype=np.float32)
         y_batch1 = np.ndarray((batchsize,), dtype=np.float32)
@@ -157,7 +158,7 @@ for epoch in range(1, n_epoch + 1):
             val_y_batch[zz] = label
             count+=1
         x_batch = xp.asarray(val_x_batch)
-        y_batch = xp.asarray(val_y_batch).reshape(batchsize,1)
+        y_batch = xp.asarray(val_y_batch).reshape(val_batchsize,1)
 
         loss , ans = forward(x_batch, y_batch, train=False)
         sum_accuracy += float(loss.data) * len(val_y_batch)
