@@ -15,15 +15,16 @@ import random
 import scipy.stats
 import cPickle
 import csv
+import cv2
 
-gpu_flag = 1
+gpu_flag = -1
 
 if gpu_flag >= 0:
     cuda.check_cuda_available()
 xp = cuda.cupy if gpu_flag >= 0 else np
 
-batchsize = 6
-val_batchsize=5
+batchsize = 4
+val_batchsize=4
 n_epoch = 100
 tate=165
 yoko=25
@@ -35,11 +36,11 @@ yoko=25
 # plt.imshow(X_train[1][0], cmap=pylab.cm.gray_r, interpolation='nearest')
 # plt.show()
 #, stride=1,pad=2
-model = chainer.FunctionSet(conv1=L.Convolution2D(1,  40, 2),
-                            conv2=L.Convolution2D(40, 20,  2),
-                            fc6=L.Linear(4000, 2048),
-                            fc7=L.Linear(2048, 512),
-                            fc8=L.Linear(512, 1),
+model = chainer.FunctionSet(conv1=L.Convolution2D(1,  40, 3,stride=2),
+                            conv2=L.Convolution2D(40, 20,  3,stride=2),
+                            fc6=L.Linear(4500, 1024),
+                            fc7=L.Linear(1024, 256),
+                            fc8=L.Linear(256, 1),
                             )
 if gpu_flag >= 0:
     cuda.get_device(gpu_flag).use()
@@ -48,7 +49,7 @@ if gpu_flag >= 0:
 def forward(x_data, y_data, train=True):
     x, t = chainer.Variable(x_data), chainer.Variable(y_data)
     h = F.max_pooling_2d(F.relu(
-        F.local_response_normalization(model.conv1(x))), 2,stride=2)
+        F.local_response_normalization(model.conv1(x))), 3,stride=2)
     h = F.max_pooling_2d(F.relu(
         F.local_response_normalization(model.conv2(h))), 3,stride=2)
     h = F.dropout(F.relu(model.fc6(h)))
@@ -95,14 +96,18 @@ for al1,al in enumerate(gyokaku):
     with open(str(al[1]) + '.pkl', 'rb') as i:
         data = cPickle.load(i)
 
-    for i in range(1,4800,25):
+    for i in range(1,4801,600):
         flag=0
-        for k in range(25):
+        for k in range(1200):
             if int(data[len(data)-i-k][0])==0:
                 flag=1
                 break
         if flag==0:
-            all_data.append((data[len(data)-25-i:len(data)-i,0:165],float(al[2])))
+            test_list = np.ndarray((1, 1200, 165), dtype=np.uint8)
+            test_list[0]=data[len(data)-1200-i:len(data)-i, 0:165]
+            size = (255, 255)
+            resize = cv2.resize(test_list[0], size, interpolation=cv2.INTER_CUBIC)
+            all_data.append((resize,float(al[2])))
 
 
 
@@ -114,8 +119,8 @@ a=len(all_data)
 ds = np.arange(a)
 
 N, N_test = np.split(ds, [int(ds.size * 0.8)])
-N=len(N)+1
-N_test=len(N_test)-1-1
+N=len(N)
+N_test=len(N_test)-1
 print a,N,N_test
 
 perm = np.random.permutation(len(all_data))
@@ -132,7 +137,7 @@ for epoch in range(1, n_epoch + 1):
     count=0
     for i in range(0, N, batchsize):
         x_batch1 = np.ndarray(
-            (batchsize, 1, yoko, tate), dtype=np.float32)
+            (batchsize, 1, 255, 255), dtype=np.float32)
         y_batch1 = np.ndarray((batchsize,), dtype=np.float32)
         batch_pool = [None] * batchsize
 
@@ -158,7 +163,7 @@ for epoch in range(1, n_epoch + 1):
     test_gosa1=0
     for i in range(0, N_test, val_batchsize):
         val_x_batch = np.ndarray(
-            (val_batchsize, 1, yoko, tate), dtype=np.float32)
+            (val_batchsize, 1, 255, 255), dtype=np.float32)
         val_y_batch = np.ndarray((val_batchsize,), dtype=np.float32)
         val_batch_pool = [None] * val_batchsize
 
