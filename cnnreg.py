@@ -22,8 +22,8 @@ if gpu_flag >= 0:
     cuda.check_cuda_available()
 xp = cuda.cupy if gpu_flag >= 0 else np
 
-batchsize = 3
-val_batchsize=6
+batchsize = 6
+val_batchsize=5
 n_epoch = 100
 tate=165
 yoko=25
@@ -56,7 +56,7 @@ def forward(x_data, y_data, train=True):
     h = model.fc8(h)
     #import pdb; pdb.set_trace()
     if train:
-        return F.mean_squared_error(h, t)
+        return F.mean_squared_error(h,t)
 
     else:
         return F.mean_squared_error(h, t), h
@@ -68,7 +68,7 @@ fp1 = open("accuracy.txt", "w")
 fp2 = open("loss.txt", "w")
 trainpic = open("train_list.txt", "w")
 testpic = open("test_list.txt", "w")
-gosa = open("gosa.txt", "w")
+gosalist = open("gosa.txt", "w")
 
 
 
@@ -91,13 +91,18 @@ gyokaku = np.genfromtxt("gyokaku.csv", delimiter=",", dtype=np.string_)
 
 
 for al1,al in enumerate(gyokaku):
-    print al1
+    print al[1]
     with open(str(al[1]) + '.pkl', 'rb') as i:
         data = cPickle.load(i)
 
-    for i in range(2,50):
-        if int(data[len(data)-25*i][0])!=0:
-            all_data.append((data[len(data)-25*(i+1):len(data)-25*i,0:165],float(al[2])))
+    for i in range(1,4800,25):
+        flag=0
+        for k in range(25):
+            if int(data[len(data)-i-k][0])==0:
+                flag=1
+                break
+        if flag==0:
+            all_data.append((data[len(data)-25-i:len(data)-i,0:165],float(al[2])))
 
 
 
@@ -109,9 +114,12 @@ a=len(all_data)
 ds = np.arange(a)
 
 N, N_test = np.split(ds, [int(ds.size * 0.8)])
-N=len(N)
-N_test=len(N_test)
+N=len(N)+1
+N_test=len(N_test)-1-1
 print a,N,N_test
+
+perm = np.random.permutation(len(all_data))
+print perm
 
 for epoch in range(1, n_epoch + 1):
 
@@ -119,6 +127,8 @@ for epoch in range(1, n_epoch + 1):
     print "epoch: %d" % epoch
 
     sum_loss = 0
+    train_gosa=0
+    test_gosa=0
     count=0
     for i in range(0, N, batchsize):
         x_batch1 = np.ndarray(
@@ -127,7 +137,7 @@ for epoch in range(1, n_epoch + 1):
         batch_pool = [None] * batchsize
 
         for z in range(batchsize):
-            path, label = all_data[count]
+            path, label = all_data[perm[count]]
             batch_pool[z] = path
             x_batch1[z]=batch_pool[z]
             y_batch1[z] = label
@@ -136,15 +146,16 @@ for epoch in range(1, n_epoch + 1):
         x_batch = xp.asarray(x_batch1)
         y_batch = xp.asarray(y_batch1).reshape(batchsize,1)
         optimizer.zero_grads()
-        loss = forward(x_batch, y_batch)
-        loss.backward()
+        gosa = forward(x_batch, y_batch)
+        gosa.backward()
         optimizer.update()
-        sum_loss += float(loss.data) * len(y_batch)
-    print "train mean squared error : %f" % (sum_loss / N)
-    fp2.write("%d\t%f\n" % (epoch, sum_loss / N))
+        train_gosa += float(gosa.data) * len(y_batch)
+    print "train mean squared error : %f" % (train_gosa / N)
+    fp2.write("%d\t%f\n" % (epoch, train_gosa / N))
     fp2.flush()
 
     sum_accuracy = 0
+    test_gosa1=0
     for i in range(0, N_test, val_batchsize):
         val_x_batch = np.ndarray(
             (val_batchsize, 1, yoko, tate), dtype=np.float32)
@@ -152,7 +163,7 @@ for epoch in range(1, n_epoch + 1):
         val_batch_pool = [None] * val_batchsize
 
         for zz in range(val_batchsize):
-            path, label = all_data[count]
+            path, label = all_data[perm[count]]
             val_batch_pool[zz] = path
             val_x_batch[zz]=val_batch_pool[zz]
             val_y_batch[zz] = label
@@ -160,18 +171,20 @@ for epoch in range(1, n_epoch + 1):
         x_batch = xp.asarray(val_x_batch)
         y_batch = xp.asarray(val_y_batch).reshape(val_batchsize,1)
 
-        loss , ans = forward(x_batch, y_batch, train=False)
-        sum_accuracy += float(loss.data) * len(val_y_batch)
+        gosa , ans = forward(x_batch, y_batch, train=False)
+        test_gosa += float(gosa.data) * len(val_y_batch)
+        for sa in range(val_batchsize):
+            test_gosa1+=abs(float(ans.data[sa]-val_y_batch[sa]))
         #pearson = scipy.stats.pearsonr(acc.data,ans.data)
         for sa in range(val_batchsize):
-            gosa.write("%f %f" % (ans.data[sa],val_y_batch[sa]))
-            gosa.write("\n")
-            gosa.flush()
+            gosalist.write("%f %f" % (ans.data[sa],val_y_batch[sa]))
+            gosalist.write("\n")
+            gosalist.flush()
 
 
     count=0
-    print "test mean squared error: %f" % (sum_accuracy / N_test)
-    fp1.write("%d\t%f\n" % (epoch, sum_accuracy / N_test))
+    print "test mean squared error: %f" % (test_gosa1 / N_test)
+    fp1.write("%d\t%f\n" % (epoch, test_gosa / N_test))
     fp1.flush()
 
 end_time = time.clock()
@@ -179,7 +192,7 @@ print end_time - start_time
 
 fp1.close()
 fp2.close()
-gosa.close()
+gosalist.close()
 
 import cPickle
 # CPU環境でも学習済みモデルを読み込めるようにCPUに移してからダンプ
