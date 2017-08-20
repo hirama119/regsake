@@ -115,15 +115,15 @@ for al in N_test_data:
         if flag<=100:
             resize = data[i:i+width, 0:height].reshape(1,width,height)
             test.append(resize)
-    test_data.append((resize,al[2]))   
+    test_data.append((test,al[2]))   
 # 訓練ループ
 start_time = time.clock()
 
 
 #np.random.shuffle(train_data)
 #np.random.shuffle(test_data)
-N=len(train_data)
-N_test=len(test_data)
+N=0
+N_test=0
 print N,N_test
 
 for epoch in range(1, n_epoch + 1):
@@ -135,18 +135,18 @@ for epoch in range(1, n_epoch + 1):
     train_gosa=0
     test_gosa=0
     count=0
-    for i in range(0, N, batchsize):
+    for i in train_data:
+        batchsize=len(i[0])
         x_batch1 = np.ndarray(
             (batchsize, 1, width, height), dtype=np.float32)
         y_batch1 = np.ndarray((batchsize,), dtype=np.float32)
         batch_pool = [None] * batchsize
-
+        path, label = i
         for z in range(batchsize):
-            path, label = train_data[count]
-            batch_pool[z] = path
+            batch_pool[z] = path[z]
             x_batch1[z]=batch_pool[z]
             y_batch1[z] = label
-            count += 1
+            count+=1
         #x_batch2 = x_batch1.reshape(batchsize, 1, insize, insize)
         x_batch = xp.asarray(x_batch1)
         y_batch = xp.asarray(y_batch1).reshape(batchsize,1)
@@ -159,22 +159,23 @@ for epoch in range(1, n_epoch + 1):
             #print answer,float(gyokaku[0][15])
             train_gosa += abs(answer*float(gyokaku[0][15]))
         #train_gosa += float(gosa.data) * len(y_batch)
-    print "train mean squared error : %f" % (train_gosa / N)
-    fp2.write("%d\t%f\n" % (epoch, train_gosa / N))
+    print "train mean squared error : %f" % (train_gosa / count)
+    fp2.write("%d\t%f\n" % (epoch, train_gosa / count))
     fp2.flush()
     
     count = 0
     sum_accuracy = 0
     test_gosa = 0
-    for i in range(0, N_test, val_batchsize):
+    for i in test_data:
+        val_batchsize = len(i[0])
         val_x_batch = np.ndarray(
             (val_batchsize, 1, width, height), dtype=np.float32)
         val_y_batch = np.ndarray((val_batchsize,), dtype=np.float32)
         val_batch_pool = [None] * val_batchsize
 
+        path, label = i
         for zz in range(val_batchsize):
-            path, label = test_data[count]
-            val_batch_pool[zz] = path
+            val_batch_pool[zz] = path[zz]
             val_x_batch[zz]=val_batch_pool[zz]
             val_y_batch[zz] = label
             count+=1
@@ -187,13 +188,11 @@ for epoch in range(1, n_epoch + 1):
         for sa in range(val_batchsize):
             answer = float(ans.data[sa])- float(val_y_batch[sa])
             test_gosa += abs(answer*float(gyokaku[0][15]))
-            print float(ans.data[sa])*float(gyokaku[0][15])
         #pearson = scipy.stats.pearsonr(acc.data,ans.data)
 
 
-    count=0
-    print "test gosa: %f" % (test_gosa / N_test)
-    fp1.write("%d\t%f\n" % (epoch, test_gosa / N_test))
+    print "test gosa: %f" % (test_gosa / count)
+    fp1.write("%d\t%f\n" % (epoch, test_gosa / count))
     fp1.flush()
 
 end_time = time.clock()
