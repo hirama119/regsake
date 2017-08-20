@@ -36,11 +36,11 @@ yoko=1200
 # plt.imshow(X_train[1][0], cmap=pylab.cm.gray_r, interpolation='nearest')
 # plt.show()
 #, stride=1,pad=2
-model = chainer.FunctionSet(conv1=L.Convolution2D(1,  40, 3,stride=2),
-                            conv2=L.Convolution2D(40, 20,  3,stride=2),
-                            fc6=L.Linear(4500, 1024),
-                            fc7=L.Linear(1024, 256),
-                            fc8=L.Linear(256, 5),
+model = chainer.FunctionSet(conv1=L.Convolution2D(1,  20, 5,stride=1),
+                            conv2=L.Convolution2D(20, 10,  5,stride=3),
+                            fc6=L.Linear(16640, 5120),
+                            fc7=L.Linear(5120, 256),
+                            fc8=L.Linear(256, 1),
                             )
 if gpu_flag >= 0:
     cuda.get_device(gpu_flag).use()
@@ -49,20 +49,20 @@ if gpu_flag >= 0:
 def forward(x_data, y_data, train=True):
     x, t = chainer.Variable(x_data), chainer.Variable(y_data)
     h = F.max_pooling_2d(F.relu(
-        F.local_response_normalization(model.conv1(x))), 3,stride=2)
+        F.local_response_normalization(model.conv1(x))), 5,stride=3)
     h = F.max_pooling_2d(F.relu(
-        F.local_response_normalization(model.conv2(h))), 3,stride=2)
+        F.local_response_normalization(model.conv2(h))), 5,stride=1)
     h = F.dropout(F.relu(model.fc6(h)))
     h = F.dropout(F.relu(model.fc7(h)))
     h = model.fc8(h)
     #import pdb; pdb.set_trace()
     if train:
-        return F.softmax_cross_entropy(h,t)
+        return F.mean_squared_error(h,t)
 
     else:
-        return F.accuracy(h, t), h
+        return F.mean_squared_error(h, t), h
 
-optimizer = optimizers.RMSpropGraves()
+optimizer = optimizers.Adam()
 optimizer.setup(model)
 
 fp1 = open("accuracy.txt", "w")
@@ -95,27 +95,19 @@ for al1,al in enumerate(gyokaku):
     print al[1]
     data=np.load(str(al[1])+".npy")
 
-    for i in range(1,4801,yoko):
+    for i in range(0,len(data)-1-yoko,yoko):
         flag=0
         for k in range(yoko):
-            if int(data[len(data)-i-k][0])==0:
+            print i+k
+            if len(np.where(data==0)[i+k])==165:
+                print "error"
                 flag=1
                 break
         if flag==0:
             test_list = np.ndarray((1, yoko, 165), dtype=np.uint8)
-            test_list[0]=data[len(data)-yoko-i:len(data)-i, 0:165]
+            test_list[0]=data[i:i+yoko, 0:165]
             size = (255, 255)
             resize = cv2.resize(test_list[0], size, interpolation=cv2.INTER_CUBIC)
-            ans=0
-            mo=float(al[2])
-            if mo>100:
-                ans=1
-            elif mo>201:
-                ans=2
-            elif mo>401:
-                ans=3
-            elif mo>700:
-                ans=4     
             all_data.append((resize,ans))
 
 
@@ -156,7 +148,7 @@ for epoch in range(1, n_epoch + 1):
             count += 1
         #x_batch2 = x_batch1.reshape(batchsize, 1, insize, insize)
         x_batch = xp.asarray(x_batch1)
-        y_batch = xp.asarray(y_batch1)
+        y_batch = xp.asarray(y_batch1).reshape(batchsize,1)
         optimizer.zero_grads()
         gosa = forward(x_batch, y_batch)
         gosa.backward()
@@ -180,7 +172,7 @@ for epoch in range(1, n_epoch + 1):
             val_y_batch[zz] = label
             count+=1
         x_batch = xp.asarray(val_x_batch)
-        y_batch = xp.asarray(val_y_batch)
+        y_batch = xp.asarray(val_y_batch).reshape(val_batchsize,1)
 
         gosa , ans = forward(x_batch, y_batch, train=False)
         sum_accuracy += float(gosa.data) * len(val_y_batch)
