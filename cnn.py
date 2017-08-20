@@ -23,8 +23,8 @@ if gpu_flag >= 0:
     cuda.check_cuda_available()
 xp = cuda.cupy if gpu_flag >= 0 else np
 
-batchsize = 4
-val_batchsize=3
+batchsize = 3
+val_batchsize=2
 n_epoch = 100
 tate=165
 yoko=1200
@@ -91,11 +91,12 @@ train_list=[]
 gyokaku = np.genfromtxt("gyokaku.csv", delimiter=",", dtype=np.string_)
 
 
+count=[0,0,0,0,0]
 for al1,al in enumerate(gyokaku):
     print al[1]
     data=np.load(str(al[1])+".npy")
 
-    for i in range(1,4801,yoko):
+    for i in range(1,len(data),yoko):
         flag=0
         for k in range(yoko):
             if int(data[len(data)-i-k][0])==0:
@@ -110,16 +111,17 @@ for al1,al in enumerate(gyokaku):
             mo=float(al[2])
             if mo>100:
                 ans=1
-            elif mo>201:
+            if mo>201:
                 ans=2
-            elif mo>401:
+            if mo>401:
                 ans=3
-            elif mo>700:
-                ans=4     
+            if mo>700:
+                ans=4
+            count[ans]=count[ans]+1     
             all_data.append((resize,ans))
 
 
-
+print count
 
 # 訓練ループ
 start_time = time.clock()
@@ -127,12 +129,12 @@ start_time = time.clock()
 a=len(all_data)
 ds = np.arange(a)
 N, N_test = np.split(ds, [int(ds.size * 0.8)])
-N=len(N)+1
+N=len(N)
 
-N_test=len(N_test)-2
+N_test=len(N_test)-1
 print a,N,N_test
 
-perm = np.random.permutation(len(all_data)-1)
+perm = np.random.permutation(len(all_data))
 for epoch in range(1, n_epoch + 1):
 
 
