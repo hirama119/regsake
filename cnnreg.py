@@ -23,42 +23,43 @@ if gpu_flag >= 0:
     cuda.check_cuda_available()
 xp = cuda.cupy if gpu_flag >= 0 else np
 
-batchsize = 11
+batchsize = 6
 val_batchsize = 4
 n_epoch = 100
-height=164
+height=165
 width=1200
 
 # plt.imshow(X_train[1][0], cmap=pylab.cm.gray_r, interpolation='nearest')
 # plt.show()
 #, stride=1,pad=2
-model = chainer.FunctionSet(conv1=L.Convolution2D(1,  10, 2,stride=1),
-                            conv2=L.Convolution2D(10, 5,  2,stride=1),
-                            fc6=L.Linear(1490, 700),
-                            fc7=L.Linear(700, 350),
+model = chainer.FunctionSet(conv1=L.Convolution2D(1,  10, ksize=(2,10),stride=1),
+                            conv2=L.Convolution2D(10, 5,  ksize=(2,10),stride=1),
+                            fc6=L.Linear(6000, 1024),
+                            fc7=L.Linear(1024, 350),
                             fc8=L.Linear(350, 1),
                             )
+
 if gpu_flag >= 0:
     cuda.get_device(gpu_flag).use()
     model.to_gpu()
 
 def forward(x_data, y_data, train=True):
     x, t = chainer.Variable(x_data), chainer.Variable(y_data)
+    
     h = F.max_pooling_2d(F.relu(
-        F.local_response_normalization(model.conv1(x))), ksize=(4,20),stride=(2,10))
+        F.local_response_normalization(model.conv1(x))), ksize=(2,10),stride=(2,5))
     h = F.max_pooling_2d(F.relu(
-        F.local_response_normalization(model.conv2(h))), ksize=(4,20),stride=(2,10))
+        F.local_response_normalization(model.conv2(h))), ksize=(2,10),stride=(2,5))
     h = F.dropout(F.relu(model.fc6(h)))
     h = F.dropout(F.relu(model.fc7(h)))
     h = model.fc8(h)
-    #import pdb; pdb.set_trace()
     if train:
         return F.mean_squared_error(h,t), h
 
     else:
         return F.mean_squared_error(h, t), h
 
-optimizer = optimizers.Adam()
+optimizer = optimizers.RMSpropGraves()
 optimizer.setup(model)
 
 fp1 = open("accuracy.txt", "w")
@@ -91,31 +92,36 @@ N_test_data = np.load("N_test_data.npy")
 
 #print N_data,N_test_data
 for al in N_data:
-    data=np.load(str(al[0])+".npy")/255
+    data=np.load(str(al[0])+".npy").astype(np.float32) / 255
+    train=[]
     for i in range(0,len(data)-width,width):
         flag=0
         for k in range(width):
-            if np.count_nonzero(data[i+k])==0:
+            if np.count_nonzero(data[i+k,0:height])==0:
                 flag+=1
         if flag<=100:
-            resize = data[i:i+width, 0:164].reshape(1,width,height)
-            ans = al[2]
-            train_data.append((resize,ans))   
-
+            resize = data[i:i+width, 0:height].reshape(1,width,height)
+            train.append(resize)
+    train_data.append((train,al[2]))   
+        
 for al in N_test_data:
-    data=np.load(str(al[0])+".npy")/255
+    data=np.load(str(al[0])+".npy").astype(np.float32) / 255
+    test=[]
     for i in range(0,len(data)-width,width):
         flag=0
         for k in range(width):
-            if np.count_nonzero(data[i+k])==0:
+            if np.count_nonzero(data[i+k,0:height])==0:
                 flag+=1
         if flag<=100:
-            resize = data[i:i+width, 0:164].reshape(1,width,height)
-            ans = al[2]
-            test_data.append((resize,ans))   
+            resize = data[i:i+width, 0:height].reshape(1,width,height)
+            test.append(resize)
+    test_data.append((resize,al[2]))   
 # 訓練ループ
 start_time = time.clock()
 
+
+#np.random.shuffle(train_data)
+#np.random.shuffle(test_data)
 N=len(train_data)
 N_test=len(test_data)
 print N,N_test
@@ -149,7 +155,8 @@ for epoch in range(1, n_epoch + 1):
         gosa.backward()
         optimizer.update()
         for sa in range(batchsize):
-            answer = float(ans.data[sa])- float(y_batch[sa])
+            answer = float(ans.data[sa]) - float(y_batch1[sa])
+            #print answer,float(gyokaku[0][15])
             train_gosa += abs(answer*float(gyokaku[0][15]))
         #train_gosa += float(gosa.data) * len(y_batch)
     print "train mean squared error : %f" % (train_gosa / N)
@@ -180,6 +187,7 @@ for epoch in range(1, n_epoch + 1):
         for sa in range(val_batchsize):
             answer = float(ans.data[sa])- float(val_y_batch[sa])
             test_gosa += abs(answer*float(gyokaku[0][15]))
+            print float(ans.data[sa])*float(gyokaku[0][15])
         #pearson = scipy.stats.pearsonr(acc.data,ans.data)
 
 
